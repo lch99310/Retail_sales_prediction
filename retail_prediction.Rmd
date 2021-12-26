@@ -1,0 +1,451 @@
+---
+title: "Retail_sales_prediction"
+author: "Chung-Hao Lee"
+date: "8/22/2021"
+output: github_document
+
+always_allow_html: true
+---
+
+```{r}
+### Setting up environment
+library("tidyverse")
+library("tidymodels")
+library("timetk")
+library("modeltime")
+library("patchwork")
+```
+
+```{r}
+knitr::opts_chunk$set(
+  collapse = TRUE, 
+  comment = "#>",
+  fig.path = "fig/figures/README-",
+  out.width = "100%",
+  message=FALSE, 
+  warning=FALSE
+)
+```
+
+```{r}
+### Loading dataset
+
+####Total Business Sales, Not Seasonally Adjusted
+df_sales <- 
+  read_csv("/Users/yginger/Desktop/GitHub_repo/Data Analytics/Time Series/Retail sales prediction/Inventory and sales dataset/TOTBUSSMNSA.csv") %>% 
+  select(-c(realtime_start, realtime_end)) %>% 
+  rename(sales = value) %>% 
+  mutate(trend = row_number(),
+         quarter = as.factor(lubridate::quarter(date)),
+         month = as.factor(lubridate::month(date)))
+
+df_inv <- 
+  read_csv("/Users/yginger/Desktop/GitHub_repo/Data Analytics/Time Series/Retail sales prediction/Inventory and sales dataset/TOTBUSIMNSA.csv") %>% 
+  select(-c(realtime_start, realtime_end))%>% 
+  rename(inv = value) %>% 
+  mutate(trend = row_number(),
+         quarter = as.factor(lubridate::quarter(date)),
+         month = as.factor(lubridate::month(date)))
+
+str(df_sales)
+str(df_inv)
+```
+
+
+```{r}
+### Plot sales and inv
+df_sales %>% 
+  plot_time_series(date, sales, .smooth=FALSE, .plotly_slider = T, .title = "Sales")
+
+df_inv %>% 
+  plot_time_series(date, inv, .smooth=FALSE, .plotly_slider = T, .title = "Inventory")
+
+```
+* We can see that both sales and inventory have similar patterns and have drops after 2008.
+
+```{r}
+###Seasonal plot for US retail sales from 2000
+df_sales %>% 
+  filter(date >= '2000-01-01') %>% 
+  group_by(lubridate::year(date)) %>% 
+  mutate(sales = scale(sales) - scale(sales)[1]) %>% 
+  ungroup() %>% 
+  plot_time_series(month, sales, 
+                   .smooth= FALSE, 
+                   .color_var = lubridate::year(date), 
+                   .interactive = FALSE, 
+                   .color_lab = "Year", 
+                   .title='Seasonal plot for US retail sales from 2000',
+                   .y_lab='Sales', 
+                   .x_lab='Month')
+```
+* Excpt 2008, every sales have upward trends in a year since 2000.
+
+```{r}
+# Create a seasonal subseries plot for the subset data starting from 2000
+
+df_sales %>%
+  filter(date >= '2000-01-01') %>%
+  plot_time_series(
+        .date = date,
+        .value = sales,
+        .facet_vars = month,
+        .facet_ncol = 12, 
+        .facet_scales = "fixed",
+        .interactive = FALSE,
+        .legend_show = FALSE,
+        .title = "Seasonal subseries plot for US retail sales from 2000",
+        .x_lab = "Year",
+        .y_lab = "Sales ($ million)")  + 
+        theme(axis.text.x=element_text(angle=60, hjust=1)
+    )
+```
+* We can see that in every months, sales increases since 2000.
+
+```{r}
+# Create a STL decomposition plot for the full data
+df_sales %>%
+  plot_stl_diagnostics(
+    date, sales,
+    # Set features to return, desired frequency and trend
+    .feature_set = c("observed", "season", "trend", "remainder"), 
+    .interactive = FALSE)
+```
+* We can see in STL plot, sales has clear seasonal pattern and upward trend.
+
+```{r}
+### ACF and PACF
+df_sales%>%
+  plot_acf_diagnostics(date, sales, 
+                       .lags = 48,
+                       .show_white_noise_bars =TRUE)
+```
+* ACF shows that sales are self-related and has seasonal pattern every 12 lags.
+
+```{r}
+# Build an ARIMA model
+
+arima_auto <- 
+  arima_reg() %>% 
+  set_engine("auto_arima") %>%
+  fit(sales ~ date, data = df_sales)
+
+arima_auto
+```
+
+```{r}
+# Plot the residuals
+
+models_tbl <- modeltime_table(
+  arima_auto
+)
+
+models_tbl %>%
+    modeltime_calibrate(new_data = df_sales) %>%
+    modeltime_residuals() %>%
+    plot_modeltime_residuals(.interactive = FALSE)
+```
+
+```{r}
+# Unit root test: ADF test
+
+df_sales %>%
+  select(sales) %>% 
+  ts(start = c(1992, 1), end = c(2019, 9), frequency = 12) %>% 
+  tseries::adf.test()
+```
+
+* From ADF test, p-value < 0.05. We can say it's stationary.
+
+```{r}
+# Run ADF test again after first order differencing
+
+df_sales %>%
+  mutate(diffsales = diff_vec(sales)) %>% 
+  select(diffsales) %>% 
+  drop_na() %>% 
+  ts(start = c(1992, 1), end = c(2019, 9), frequency = 12) %>% 
+  tseries::adf.test()
+```
+
+* After first order differencing, p-value is smaller than before. We can say first order differencing is closer to stationary.
+
+```{r}
+# ACF and PACT after 1st order ordinary differencing
+
+df_sales%>%
+  plot_acf_diagnostics(date, diff_vec(df_sales$sales, difference = 1), 
+                       .lags = 48,
+                       .show_white_noise_bars =TRUE)
+```
+
+* In ACFand PACF plots, even 12, 24, 36, 48 have peaks over threshold, it is closer to stationary compared to before first order differencing.
+
+```{r}
+# After 1st order seasonal differencing
+
+df_sales%>%
+  plot_acf_diagnostics(date, diff_vec(df_sales$sales, lag = 12, difference = 1), 
+                       .lags = 48,
+                       .show_white_noise_bars =TRUE)
+```
+
+* Because from previous ACF, we know that sales has seasonal patterns (lag = 12). We apply seasonal differencing and do ACF again. This time, no periodical peaks appear. But most lags are out of therhold in ACF. So I do 1st order ordinary differencing and 1st order seasonal differencing next.
+```{r}
+# After 1st order ordinary differencing and 1st order seasonal differencing
+
+df_sales%>%
+  mutate(difford1 = diff_vec(sales, difference = 1), difford1seas1 = diff_vec(difford1, lag = 12, difference = 1)) %>% 
+  plot_acf_diagnostics(date, difford1seas1, 
+                       .lags = 48,
+                       .show_white_noise_bars =TRUE)
+```
+
+```{r}
+# After 1st order ordinary differencing and 2nd order seasonal differencing
+
+df_sales%>%
+  mutate(difford1 = diff_vec(sales, difference = 1), difford1seas1 = diff_vec(difford1, lag = 12, difference = 2)) %>% 
+  plot_acf_diagnostics(date, difford1seas1, 
+                       .lags = 48,
+                       .show_white_noise_bars =TRUE)
+```
+
+* In 1st order ordinary differencing and 1st order seasonal differencing, we see that the effect is not quite good, so I add one more on seasonal differencing and do 1st order ordinary differencing and 2nd order seasonal differencing. This time, we have a better result and more lags are fall inside therhold.
+
+# Prediction
+```{r}
+# Split the data
+
+df_train <- df_sales %>% filter(date < '2010-01-01')
+df_test<- df_sales %>% filter(date >= '2010-01-01')
+```
+
+```{r}
+# Auto ARIMA: gird search q, d, p
+auto_arima <- 
+  arima_reg() %>%
+  set_engine(engine = "auto_arima") %>%
+  fit(sales ~ date, data = df_train)
+
+auto_arima
+```
+
+```{r}
+# Model table and calibration
+
+models_tbl <- modeltime_table(auto_arima)
+
+calibration_tbl <- models_tbl %>%
+    modeltime_calibrate(new_data = df_test)
+
+calibration_tbl %>%
+  modeltime_accuracy()%>%
+  table_modeltime_accuracy(.interactive = FALSE)
+```
+
+```{r}
+### Check forcast with actual data
+calibration_tbl %>%
+    modeltime_forecast(
+        new_data    = df_test,
+        actual_data = df_sales
+    ) %>%
+    plot_modeltime_forecast(
+      .legend_max_width = 25,
+      .interactive      = FALSE
+    )
+```
+* Well, actually we forsee the trend and seasonal patterns are there, but it just not quite fit. Maybe because 2008 was once in a lifetime crisis and our split time 2010 was not far away from 2008, so it may have some deviation. 
+
+```{r}
+# Split the data on 2012
+
+df_train_12 <- df_sales %>% filter(date < '2012-01-01')
+df_test_12 <- df_sales %>% filter(date >= '2012-01-01')
+```
+
+```{r}
+# Auto ARIMA: gird search q, d, p
+auto_arima_12 <- 
+  arima_reg() %>%
+  set_engine(engine = "auto_arima") %>%
+  fit(sales ~ date, data = df_train_12)
+
+auto_arima_12
+```
+
+```{r}
+# Model table and calibration
+
+models_tbl_12 <- modeltime_table(auto_arima_12)
+
+calibration_tbl_12 <- models_tbl_12 %>%
+    modeltime_calibrate(new_data = df_test_12)
+
+calibration_tbl_12 %>%
+  modeltime_accuracy()%>%
+  table_modeltime_accuracy(.interactive = FALSE)
+```
+* We have smaller mae, rmse. Good sign of it.
+```{r}
+### Check forcast with actual data
+calibration_tbl_12 %>%
+    modeltime_forecast(
+        new_data    = df_test_12,
+        actual_data = df_sales
+    ) %>%
+    plot_modeltime_forecast(
+      .legend_max_width = 25,
+      .interactive      = FALSE
+    )
+```
+* Bang!!! The trend and patterns look quite well and we have a better prediction that fit the actual data.
+
+Next, I'd like to add another variable to see if they can improve prediction model.
+
+
+```{r}
+# importing another dataset
+df_econ <- 
+  read_csv("/Users/yginger/Desktop/GitHub_repo/Data Analytics/Time Series/Retail sales prediction/Inventory and sales dataset/us-econ.csv") %>% 
+  mutate(date = lubridate::mdy(date),
+  trend = row_number()) %>% 
+  filter(date >= '1992-01-01', date <= '2019-09-01') 
+
+skimr::skim(df_econ)
+
+# merge all tables
+df_merge <- 
+  df_sales %>% 
+  bind_cols(df_inv)
+
+df_merge_1 <- 
+  inner_join(df_merge, df_econ, by = c("trend...3" = "trend")) %>% 
+  select(sales, date...2, trend...3, quarter...4, month...5, inv, income, saving, unemployment, CPI, inflation, population, HPI) %>% 
+  rename(date = date...2, trend = trend...3, quarter = quarter...4, month = month...5)
+```
+```{r}
+linear_model <-
+  linear_reg() %>%
+  set_engine("lm") %>%
+  fit(sales ~ date + CPI + income + saving + HPI + population + inflation + trend + inv, data = df_merge_1)
+
+summary(linear_model$fit)
+```
+
+
+```{r}
+# Build an ARIMA model with another variables
+
+arima_auto_var <- 
+  arima_reg() %>% 
+  set_engine("auto_arima") %>%
+  fit(sales ~ date + CPI + income + saving + HPI + population + inflation + trend + inv, data = df_merge_1)
+
+arima_auto_var_imp <- 
+  arima_reg() %>% 
+  set_engine("auto_arima") %>%
+  fit(sales ~ date + CPI + income + saving + HPI + population , data = df_merge_1)
+
+arima_auto_var_imp_2 <- 
+  arima_reg() %>% 
+  set_engine("auto_arima") %>%
+  fit(sales ~ date + income, data = df_merge_1)
+
+arima_auto
+arima_auto_var
+arima_auto_var_imp
+arima_auto_var_imp_2
+```
+* After adding variables, we got better AIC and BIC.
+```{r}
+# Plot the residuals
+
+models_tbl_var <- modeltime_table(
+  arima_auto,
+  arima_auto_var,
+  arima_auto_var_imp,
+  arima_auto_var_imp_2
+)
+
+models_tbl_var %>%
+    modeltime_calibrate(new_data = df_merge_1) %>%
+    modeltime_residuals() %>%
+    plot_modeltime_residuals(.interactive = FALSE)
+```
+* From residue plot, we can see a better outcome of arima with variables.
+
+# Prediction with variables
+```{r}
+# Split the data on 2012
+
+df_train_12_var <- df_merge_1 %>% filter(date < '2012-01-01')
+df_test_12_var <- df_merge_1 %>% filter(date >= '2012-01-01')
+```
+
+```{r}
+# Auto ARIMA: gird search q, d, p
+auto_arima_12_var <- 
+  arima_reg() %>%
+  set_engine(engine = "auto_arima") %>%
+  fit(sales ~ date + CPI + income + saving + HPI + population + inflation + trend + inv, data = df_train_12_var)
+
+auto_arima_12_var_imp <- 
+  arima_reg() %>%
+  set_engine(engine = "auto_arima") %>%
+  fit(sales ~ date + CPI + income + saving + HPI + population, data = df_train_12_var)
+
+auto_arima_12_var_imp_2 <- 
+  arima_reg() %>%
+  set_engine(engine = "auto_arima") %>%
+  fit(sales ~ date + income, data = df_train_12_var)
+
+auto_arima_12_var
+auto_arima_12_var_imp
+auto_arima_12_var_imp_2
+```
+
+```{r}
+# Model table and calibration
+
+models_tbl_12_var <- modeltime_table(
+  auto_arima_12, 
+  auto_arima_12_var, 
+  auto_arima_12_var_imp,
+  auto_arima_12_var_imp_2)
+
+calibration_tbl_12_var <- models_tbl_12_var %>%
+    modeltime_calibrate(new_data = df_test_12_var)
+
+calibration_tbl_12_var %>%
+  modeltime_accuracy()%>%
+  table_modeltime_accuracy(.interactive = FALSE)
+```
+
+```{r}
+### Check forcast with actual data
+calibration_tbl_12_var %>%
+    modeltime_forecast(
+        
+        actual_data = df_merge_1,
+        h = 60
+    ) %>%
+    plot_modeltime_forecast(
+      .legend_max_width = 25,
+      .interactive      = FALSE
+    )
+```
+
+
+```{r}
+models_tbl <- modeltime_table(
+  arima_auto)
+
+
+fcast <- 
+  modeltime_forecast(models_tbl, actual_data = df_merge_1, , h = 100)
+
+plot_modeltime_forecast(fcast)
+```
+
