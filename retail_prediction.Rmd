@@ -55,10 +55,10 @@ str(df_inv)
 ```{r}
 ### Plot sales and inv
 df_sales %>% 
-  plot_time_series(date, sales, .smooth=FALSE, .plotly_slider = T, .title = "Sales")
+  plot_time_series(date, sales, .smooth=FALSE, .interactive = FALSE,.title = "Sales")
 
 df_inv %>% 
-  plot_time_series(date, inv, .smooth=FALSE, .plotly_slider = T, .title = "Inventory")
+  plot_time_series(date, inv, .smooth=FALSE, .interactive = FALSE, .title = "Inventory")
 
 ```
 * We can see that both sales and inventory have similar patterns and have drops after 2008.
@@ -118,7 +118,8 @@ df_sales %>%
 df_sales%>%
   plot_acf_diagnostics(date, sales, 
                        .lags = 48,
-                       .show_white_noise_bars =TRUE)
+                       .show_white_noise_bars =TRUE,
+                       .interactive = FALSE)
 ```
 * ACF shows that sales are self-related and has seasonal pattern every 12 lags.
 
@@ -176,7 +177,8 @@ df_sales %>%
 df_sales%>%
   plot_acf_diagnostics(date, diff_vec(df_sales$sales, difference = 1), 
                        .lags = 48,
-                       .show_white_noise_bars =TRUE)
+                       .show_white_noise_bars =TRUE,
+                       .interactive = FALSE)
 ```
 
 * In ACFand PACF plots, even 12, 24, 36, 48 have peaks over threshold, it is closer to stationary compared to before first order differencing.
@@ -187,7 +189,8 @@ df_sales%>%
 df_sales%>%
   plot_acf_diagnostics(date, diff_vec(df_sales$sales, lag = 12, difference = 1), 
                        .lags = 48,
-                       .show_white_noise_bars =TRUE)
+                       .show_white_noise_bars =TRUE,
+                       .interactive = FALSE)
 ```
 
 * Because from previous ACF, we know that sales has seasonal patterns (lag = 12). We apply seasonal differencing and do ACF again. This time, no periodical peaks appear. But most lags are out of therhold in ACF. So I do 1st order ordinary differencing and 1st order seasonal differencing next.
@@ -198,7 +201,8 @@ df_sales%>%
   mutate(difford1 = diff_vec(sales, difference = 1), difford1seas1 = diff_vec(difford1, lag = 12, difference = 1)) %>% 
   plot_acf_diagnostics(date, difford1seas1, 
                        .lags = 48,
-                       .show_white_noise_bars =TRUE)
+                       .show_white_noise_bars =TRUE,
+                       .interactive = FALSE)
 ```
 
 ```{r}
@@ -208,7 +212,8 @@ df_sales%>%
   mutate(difford1 = diff_vec(sales, difference = 1), difford1seas1 = diff_vec(difford1, lag = 12, difference = 2)) %>% 
   plot_acf_diagnostics(date, difford1seas1, 
                        .lags = 48,
-                       .show_white_noise_bars =TRUE)
+                       .show_white_noise_bars =TRUE,
+                       .interactive = FALSE)
 ```
 
 * In 1st order ordinary differencing and 1st order seasonal differencing, we see that the effect is not quite good, so I add one more on seasonal differencing and do 1st order ordinary differencing and 2nd order seasonal differencing. This time, we have a better result and more lags are fall inside therhold.
@@ -446,6 +451,7 @@ models_tbl <- modeltime_table(
 fcast <- 
   modeltime_forecast(models_tbl, actual_data = df_merge_1, , h = 100)
 
-plot_modeltime_forecast(fcast)
+plot_modeltime_forecast(fcast,
+                        .interactive = FALSE)
 ```
 
