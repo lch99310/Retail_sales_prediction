@@ -1,7 +1,9 @@
-Retail\_sales\_prediction
+Retail sales prediction
 ================
 Chung-Hao Lee
 8/22/2021
+
+<!-- README.md is generated from Retail_sales_prediction.Rmd. Please edit that file --> 
 
 ``` r
 ### Setting up environment
@@ -61,7 +63,7 @@ knitr::opts_chunk$set(
 
 ####Total Business Sales, Not Seasonally Adjusted
 df_sales <- 
-  read_csv("/Users/yginger/Desktop/GitHub_repo/Data Analytics/Time Series/Retail sales prediction/Inventory and sales dataset/TOTBUSSMNSA.csv") %>% 
+  read_csv("/.../TOTBUSSMNSA.csv") %>% 
   select(-c(realtime_start, realtime_end)) %>% 
   rename(sales = value) %>% 
   mutate(trend = row_number(),
@@ -69,7 +71,7 @@ df_sales <-
          month = as.factor(lubridate::month(date)))
 
 df_inv <- 
-  read_csv("/Users/yginger/Desktop/GitHub_repo/Data Analytics/Time Series/Retail sales prediction/Inventory and sales dataset/TOTBUSIMNSA.csv") %>% 
+  read_csv("/.../TOTBUSIMNSA.csv") %>% 
   select(-c(realtime_start, realtime_end))%>% 
   rename(inv = value) %>% 
   mutate(trend = row_number(),
@@ -1209,7 +1211,7 @@ prediction model.
 ``` r
 # importing another dataset
 df_econ <- 
-  read_csv("/Users/yginger/Desktop/GitHub_repo/Data Analytics/Time Series/Retail sales prediction/Inventory and sales dataset/us-econ.csv") %>% 
+  read_csv("/.../us-econ.csv") %>% 
   mutate(date = lubridate::mdy(date),
   trend = row_number()) %>% 
   filter(date >= '1992-01-01', date <= '2019-09-01') 
