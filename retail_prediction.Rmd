@@ -1,10 +1,5 @@
 ---
-title: "Retail_sales_prediction"
-author: "Chung-Hao Lee"
-date: "8/22/2021"
 output: github_document
-
-always_allow_html: true
 ---
 
 ```{r}
@@ -32,7 +27,7 @@ knitr::opts_chunk$set(
 
 ####Total Business Sales, Not Seasonally Adjusted
 df_sales <- 
-  read_csv("/Users/yginger/Desktop/GitHub_repo/Data Analytics/Time Series/Retail sales prediction/Inventory and sales dataset/TOTBUSSMNSA.csv") %>% 
+  read_csv("/.../TOTBUSSMNSA.csv") %>% 
   select(-c(realtime_start, realtime_end)) %>% 
   rename(sales = value) %>% 
   mutate(trend = row_number(),
@@ -40,7 +35,7 @@ df_sales <-
          month = as.factor(lubridate::month(date)))
 
 df_inv <- 
-  read_csv("/Users/yginger/Desktop/GitHub_repo/Data Analytics/Time Series/Retail sales prediction/Inventory and sales dataset/TOTBUSIMNSA.csv") %>% 
+  read_csv("/.../TOTBUSIMNSA.csv") %>% 
   select(-c(realtime_start, realtime_end))%>% 
   rename(inv = value) %>% 
   mutate(trend = row_number(),
@@ -313,7 +308,7 @@ Next, I'd like to add another variable to see if they can improve prediction mod
 ```{r}
 # importing another dataset
 df_econ <- 
-  read_csv("/Users/yginger/Desktop/GitHub_repo/Data Analytics/Time Series/Retail sales prediction/Inventory and sales dataset/us-econ.csv") %>% 
+  read_csv("/.../us-econ.csv") %>% 
   mutate(date = lubridate::mdy(date),
   trend = row_number()) %>% 
   filter(date >= '1992-01-01', date <= '2019-09-01') 
