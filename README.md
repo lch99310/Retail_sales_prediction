@@ -3,6 +3,8 @@ Retail\_sales\_prediction
 Chung-Hao Lee
 8/22/2021
 
+<!-- README.md is generated from Retail_sales_prediction.Rmd. Please edit that file --> 
+
 ``` r
 ### Setting up environment
 library("tidyverse") # for ggplot2
